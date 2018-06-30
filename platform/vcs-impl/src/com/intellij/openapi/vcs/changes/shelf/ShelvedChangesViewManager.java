@@ -55,9 +55,7 @@ import com.intellij.openapi.vcs.changes.issueLinks.IssueLinkRenderer;
 import com.intellij.openapi.vcs.changes.issueLinks.TreeLinkMouseListener;
 import com.intellij.openapi.vcs.changes.patch.RelativePathCalculator;
 import com.intellij.openapi.vcs.changes.patch.tool.PatchDiffRequest;
-import com.intellij.openapi.vcs.changes.ui.ChangeListDragBean;
-import com.intellij.openapi.vcs.changes.ui.ChangesViewContentManager;
-import com.intellij.openapi.vcs.changes.ui.ShelvedChangeListDragBean;
+import com.intellij.openapi.vcs.changes.ui.*;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
@@ -67,6 +65,7 @@ import com.intellij.ui.*;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.IconUtil;
 import com.intellij.util.IconUtil.IconSizeWrapper;
+import com.intellij.util.PlatformIcons;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBus;
 import com.intellij.util.text.DateFormatUtil;
@@ -298,6 +297,7 @@ public class ShelvedChangesViewManager implements ProjectComponent {
     }
     myMoveRenameInfo.clear();
 
+    //TODO use/reuse/adapt TreeModelBuilder ?
     for(ShelvedChangeList changeList: changeLists) {
       DefaultMutableTreeNode node = new ShelvedListNode(changeList);
       model.insertNodeInto(node, myRoot, myRoot.getChildCount());
@@ -316,10 +316,10 @@ public class ShelvedChangesViewManager implements ProjectComponent {
       Collections.sort(shelvedFilesNodes, ShelvedFilePatchComparator.getInstance());
       for (int i = 0; i < shelvedFilesNodes.size(); i++) {
         final Object filesNode = shelvedFilesNodes.get(i);
-        final DefaultMutableTreeNode pathNode = new DefaultMutableTreeNode(filesNode);
-        model.insertNodeInto(pathNode, node, i);
+        insertFileNode(model, node, i, filesNode);
       }
     }
+
     return model;
   }
 
@@ -611,6 +611,9 @@ public class ShelvedChangesViewManager implements ProjectComponent {
         }
         final String movedMessage = myMoveRenameInfo.get(Couple.of(binaryFile.BEFORE_PATH, binaryFile.AFTER_PATH));
         renderFileName(path, binaryFile.getFileStatus(), movedMessage);
+      } else {
+        setIcon(PlatformIcons.FOLDER_ICON);
+        append(String.valueOf(nodeValue), SimpleTextAttributes.REGULAR_ATTRIBUTES);
       }
     }
 
@@ -923,5 +926,38 @@ public class ShelvedChangesViewManager implements ProjectComponent {
     public boolean canEat(Update update) {
       return true;
     }
+  }
+
+  private String getBeforePath(Object filesNode) {
+    //TODO create or reuse a common interface
+    return filesNode instanceof ShelvedChange ? ((ShelvedChange) filesNode).getBeforePath() : ((ShelvedBinaryFile) filesNode).BEFORE_PATH;
+  }
+
+  private void insertFileNode(DefaultTreeModel model, DefaultMutableTreeNode parentNode, int index, Object fileNodeData) {
+    String fileNodePath = getBeforePath(fileNodeData);
+    boolean directoryMode = true;
+    DefaultMutableTreeNode currentNode = parentNode;
+    DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(fileNodeData);
+    if (directoryMode) {
+      String[] path = fileNodePath.split("/");
+      for (int i = 0; i < path.length - 1; i++) {
+        String childNodeName = path[i];
+        DefaultMutableTreeNode childNode = null;
+        for (int childIndex = 0; childIndex < currentNode.getChildCount(); childIndex++) {
+          DefaultMutableTreeNode child = (DefaultMutableTreeNode)currentNode.getChildAt(childIndex);
+          if ((child.getUserObject() instanceof String) && childNodeName.equals(child.getUserObject())) {
+            childNode = child;
+            break;
+          }
+        }
+
+        if (childNode == null) {
+          childNode = new DefaultMutableTreeNode(childNodeName);
+          model.insertNodeInto(childNode, currentNode, index);
+        }
+        currentNode = childNode;
+      }
+    }
+    model.insertNodeInto(fileNode, currentNode, index);
   }
 }
